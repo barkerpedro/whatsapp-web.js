@@ -2,9 +2,9 @@
 <html>
 
 <head>
-  <meta name="generator" content="JSDoc 3.6.3">
+  <meta name="generator" content="JSDoc 3.6.6">
   <meta charset="utf-8">
-  <title>whatsapp-web.js 1.2.1 &raquo; Source: structures/Chat.js</title>
+  <title>whatsapp-web.js 1.12.4 &raquo; Source: structures/Chat.js</title>
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Karla:400,400i,700,700i" type="text/css">
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Noto+Serif:400,400i,700,700i" type="text/css">
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Inconsolata:500" type="text/css">
@@ -15,7 +15,7 @@
   <nav id="jsdoc-navbar" role="navigation" class="jsdoc-navbar">
     <div id="jsdoc-navbar-container">
       <div id="jsdoc-navbar-content">
-        <a href="index.html" class="jsdoc-navbar-package-name">whatsapp-web.<wbr>js 1.<wbr>2.<wbr>1</a>
+        <a href="index.html" class="jsdoc-navbar-package-name">whatsapp-web.<wbr>js 1.<wbr>12.<wbr>4</a>
       </div>
     </div>
   </nav>
@@ -77,7 +77,7 @@ class Chat extends Base {
         this.unreadCount &#x3D; data.unreadCount;
 
         /**
-         * Unix timestamp for when the chat was created
+         * Unix timestamp for when the last activity occurred
          * @type {number}
          */
         this.timestamp &#x3D; data.t;
@@ -88,13 +88,31 @@ class Chat extends Base {
          */
         this.archived &#x3D; data.archive;
 
+        /**
+         * Indicates if the Chat is pinned
+         * @type {boolean}
+         */
+        this.pinned &#x3D; !!data.pin;
+
+        /**
+         * Indicates if the chat is muted or not
+         * @type {number}
+         */
+        this.isMuted &#x3D; data.isMuted;
+
+        /**
+         * Unix timestamp for when the mute expires
+         * @type {number}
+         */
+        this.muteExpiration &#x3D; data.muteExpiration;
+
         return super._patch(data);
     }
 
     /**
      * Send a message to this chat
      * @param {string|MessageMedia|Location} content
-     * @param {object} options 
+     * @param {MessageSendOptions} [options] 
      * @returns {Promise&amp;lt;Message&gt;} Message that was just sent
      */
     async sendMessage(content, options) {
@@ -144,35 +162,74 @@ class Chat extends Base {
     }
 
     /**
+     * Pins this chat
+     * @returns {Promise&amp;lt;boolean&gt;} New pin state. Could be false if the max number of pinned chats was reached.
+     */
+    async pin() {
+        return this.client.pinChat(this.id._serialized);
+    }
+
+    /**
+     * Unpins this chat
+     * @returns {Promise&amp;lt;boolean&gt;} New pin state
+     */
+    async unpin() {
+        return this.client.unpinChat(this.id._serialized);
+    }
+
+    /**
+     * Mutes this chat until a specified date
+     * @param {Date} unmuteDate Date at which the Chat will be unmuted
+     */
+    async mute(unmuteDate) {
+        return this.client.muteChat(this.id._serialized, unmuteDate);
+    }
+
+    /**
+     * Unmutes this chat
+     */
+    async unmute() {
+        return this.client.unmuteChat(this.id._serialized);
+    }
+
+    /**
+     * Mark this chat as unread
+     */
+    async markUnread(){
+        return this.client.markChatUnread(this.id._serialized);
+    }
+
+    /**
      * Loads chat messages, sorted from earliest to latest.
      * @param {Object} searchOptions Options for searching messages. Right now only limit is supported.
      * @param {Number} [searchOptions.limit&#x3D;50] The amount of messages to return. Note that the actual number of returned messages may be smaller if there aren&#x27;t enough messages in the conversation. Set this to Infinity to load all messages.
      * @returns {Promise&amp;lt;Array&amp;lt;Message&gt;&gt;}
      */
     async fetchMessages(searchOptions) {
-        if(!searchOptions || !searchOptions.limit) {
-            searchOptions &#x3D; {limit: 50};
+        if (!searchOptions || !searchOptions.limit) {
+            searchOptions &#x3D; { limit: 50 };
         }
         let messages &#x3D; await this.client.pupPage.evaluate(async (chatId, limit) &#x3D;&gt; {
             const msgFilter &#x3D; m &#x3D;&gt; !m.isNotification; // dont include notification messages
-            
+
             const chat &#x3D; window.Store.Chat.get(chatId);
             let msgs &#x3D; chat.msgs.models.filter(msgFilter);
-            
-            while(msgs.length &amp;lt; limit) {
+
+            while (msgs.length &amp;lt; limit) {
                 const loadedMessages &#x3D; await chat.loadEarlierMsgs();
-                if(!loadedMessages) break;
+                if (!loadedMessages) break;
                 msgs &#x3D; [...loadedMessages.filter(msgFilter), ...msgs];
             }
 
             msgs.sort((a, b) &#x3D;&gt; (a.t &gt; b.t) ? 1 : -1);
-            return msgs.splice(msgs.length - limit).map(m &#x3D;&gt; m.serialize());
+            if (msgs.length &gt; limit) msgs &#x3D; msgs.splice(msgs.length - limit);
+            return msgs.map(m &#x3D;&gt; window.WWebJS.getMessageModel(m));
 
         }, this.id._serialized, searchOptions.limit);
 
         return messages.map(m &#x3D;&gt; new Message(this.client, m));
     }
-   
+
     /**
      * Simulate typing in chat. This will last for 25 seconds.
      */
@@ -182,7 +239,7 @@ class Chat extends Base {
             return true;
         }, this.id._serialized);
     }
-    
+
     /**
      * Simulate recording audio in chat. This will last for 25 seconds.
      */
@@ -202,6 +259,22 @@ class Chat extends Base {
             return true;
         }, this.id._serialized);
     }
+
+    /**
+     * Returns the Contact that corresponds to this Chat.
+     * @returns {Promise&amp;lt;Contact&gt;}
+     */
+    async getContact() {
+        return await this.client.getContactById(this.id._serialized);
+    }
+
+    /**
+     * Returns array of all Labels assigned to this Chat
+     * @returns {Promise&amp;lt;Array&amp;lt;Label&gt;&gt;}
+     */
+    async getLabels() {
+        return this.client.getChatLabels(this.id._serialized);
+    }
 }
 
 module.exports &#x3D; Chat;
@@ -215,7 +288,7 @@ module.exports &#x3D; Chat;
   <footer id="jsdoc-footer" class="jsdoc-footer">
     <div id="jsdoc-footer-container">
       <p>
-        Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc</a> 3.6.3 on March 5, 2020.
+        Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc</a> 3.6.6 on February 11, 2021.
       </p>
     </div>
   </footer>

@@ -3,6 +3,14 @@
 const Chat = require('./Chat');
 
 /**
+ * Group participant information
+ * @typedef {Object} GroupParticipant
+ * @property {ContactId} id
+ * @property {boolean} isAdmin
+ * @property {boolean} isSuperAdmin
+ */
+
+/**
  * Represents a Group Chat on WhatsApp
  * @extends {Chat}
  */
@@ -15,6 +23,7 @@ class GroupChat extends Chat {
 
     /**
      * Gets the group owner
+     * @type {ContactId}
      */
     get owner() {
         return this.groupMetadata.owner;
@@ -35,9 +44,10 @@ class GroupChat extends Chat {
     get description() {
         return this.groupMetadata.desc;
     }
+
     /**
      * Gets the group participants
-     * @type {array}
+     * @type {Array<GroupParticipant>}
      */
     get participants() {
         return this.groupMetadata.participants;
@@ -46,6 +56,7 @@ class GroupChat extends Chat {
     /**
      * Adds a list of participants by ID to the group
      * @param {Array<string>} participantIds 
+     * @returns {Promise<Object>}
      */
     async addParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) => {
@@ -56,6 +67,7 @@ class GroupChat extends Chat {
     /**
      * Removes a list of participants by ID to the group
      * @param {Array<string>} participantIds 
+     * @returns {Promise<Object>}
      */
     async removeParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) => {
@@ -66,6 +78,7 @@ class GroupChat extends Chat {
     /**
      * Promotes participants by IDs to admins
      * @param {Array<string>} participantIds 
+     * @returns {Promise<{ status: number }>} Object with status code indicating if the operation was successful
      */
     async promoteParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) => {
@@ -76,6 +89,7 @@ class GroupChat extends Chat {
     /**
      * Demotes participants by IDs to regular users
      * @param {Array<string>} participantIds 
+     * @returns {Promise<{ status: number }>} Object with status code indicating if the operation was successful
      */
     async demoteParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) => {
@@ -86,6 +100,7 @@ class GroupChat extends Chat {
     /**
      * Updates the group subject
      * @param {string} subject 
+     * @returns {Promise} 
      */
     async setSubject(subject) {
         let res = await this.client.pupPage.evaluate((chatId, subject) => {
@@ -100,6 +115,7 @@ class GroupChat extends Chat {
     /**
      * Updates the group description
      * @param {string} description 
+     * @returns {Promise} 
      */
     async setDescription(description) {
         let res = await this.client.pupPage.evaluate((chatId, description) => {
@@ -113,7 +129,40 @@ class GroupChat extends Chat {
     }
 
     /**
+     * Updates the group settings to only allow admins to send messages.
+     * @param {boolean} [adminsOnly=true] Enable or disable this option 
+     * @returns {Promise<boolean>} Returns true if the setting was properly updated. This can return false if the user does not have the necessary permissions.
+     */
+    async setMessagesAdminsOnly(adminsOnly=true) {
+        let res = await this.client.pupPage.evaluate((chatId, value) => {
+            return window.Store.Wap.setGroupProperty(chatId, 'announcement', value);
+        }, this.id._serialized, adminsOnly);
+
+        if (res.status !== 200) return false;
+        
+        this.groupMetadata.announce = adminsOnly;
+        return true;
+    }
+
+    /**
+     * Updates the group settings to only allow admins to edit group info (title, description, photo).
+     * @param {boolean} [adminsOnly=true] Enable or disable this option 
+     * @returns {Promise<boolean>} Returns true if the setting was properly updated. This can return false if the user does not have the necessary permissions.
+     */
+    async setInfoAdminsOnly(adminsOnly=true) {
+        let res = await this.client.pupPage.evaluate((chatId, value) => {
+            return window.Store.Wap.setGroupProperty(chatId, 'restrict', value);
+        }, this.id._serialized, adminsOnly);
+
+        if (res.status !== 200) return false;
+        
+        this.groupMetadata.restrict = adminsOnly;
+        return true;
+    }
+
+    /**
      * Gets the invite code for a specific group
+     * @returns {Promise<string>} Group's invite code
      */
     async getInviteCode() {
         let res = await this.client.pupPage.evaluate(chatId => {
@@ -129,6 +178,7 @@ class GroupChat extends Chat {
     
     /**
      * Invalidates the current group invite code and generates a new one
+     * @returns {Promise}
      */
     async revokeInvite() {
         return await this.client.pupPage.evaluate(chatId => {
@@ -137,28 +187,8 @@ class GroupChat extends Chat {
     }
 
     /**
-     * Returns an object with information about the invite code's group
-     * @param {string} inviteCode 
-     * @returns {Promise<object>} Invite information
-     */
-    static async getInviteInfo(inviteCode) {
-        return await this.client.pupPage.evaluate(inviteCode => {
-            return window.Store.Wap.groupInviteInfo(inviteCode);
-        }, inviteCode);
-    }
-
-    /**
-     * Joins a group with an invite code
-     * @param {string} inviteCode 
-     */
-    static async join(inviteCode) {
-        return await this.client.pupPage.evaluate(inviteCode => {
-            return window.Store.Wap.acceptGroupInvite(inviteCode);
-        }, inviteCode);
-    }
-
-    /**
      * Makes the bot leave the group
+     * @returns {Promise}
      */
     async leave() {
         return await this.client.pupPage.evaluate(chatId => {

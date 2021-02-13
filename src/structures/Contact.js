@@ -3,6 +3,14 @@
 const Base = require('./Base');
 
 /**
+ * ID that represents a contact
+ * @typedef {Object} ContactId
+ * @property {string} server
+ * @property {string} user
+ * @property {string} _serialized
+ */
+
+/**
  * Represents a Contact on WhatsApp
  * @extends {Base}
  */
@@ -16,7 +24,7 @@ class Contact extends Base {
     _patch(data) {
         /**
          * ID that represents the contact
-         * @type {object}
+         * @type {ContactId}
          */
         this.id = data.id;
 
@@ -95,6 +103,12 @@ class Contact extends Base {
          */
         this.isMyContact = data.isMyContact;
 
+        /**
+         * Indicates if you have blocked this contact
+         * @type {boolean}
+         */
+        this.isBlocked = data.isBlocked;
+
         return super._patch(data);
     }
 
@@ -103,11 +117,63 @@ class Contact extends Base {
      * @returns {Promise<string>}
      */
     async getProfilePicUrl() {
-        const profilePic = await this.client.pupPage.evaluate((contactId) => {
-            return window.Store.Wap.profilePicFind(contactId);
+        return await this.client.getProfilePicUrl(this.id._serialized);
+    }
+
+    /**
+     * Returns the Chat that corresponds to this Contact. 
+     * Will return null when getting chat for currently logged in user.
+     * @returns {Promise<Chat>}
+     */
+    async getChat() {
+        if(this.isMe) return null;
+
+        return await this.client.getChatById(this.id._serialized);
+    }
+
+    /**
+     * Blocks this contact from WhatsApp
+     * @returns {Promise<boolean>}
+     */
+    async block() {
+        if(this.isGroup) return false;
+
+        await this.client.pupPage.evaluate(async (contactId) => {
+            const contact = window.Store.Contact.get(contactId);
+            await window.Store.BlockContact.blockContact(contact);
         }, this.id._serialized);
 
-        return profilePic ? profilePic.eurl : undefined;
+        return true;
+    }
+
+    /**
+     * Unblocks this contact from WhatsApp
+     * @returns {Promise<boolean>}
+     */
+    async unblock() {
+        if(this.isGroup) return false;
+
+        await this.client.pupPage.evaluate(async (contactId) => {
+            const contact = window.Store.Contact.get(contactId);
+            await window.Store.BlockContact.unblockContact(contact);
+        }, this.id._serialized);
+
+        return true;
+    }
+
+    /**
+     * Gets the Contact's current "about" info. Returns null if you don't have permission to read their status.
+     * @returns {Promise<?string>}
+     */
+    async getAbout() {
+        const about = await this.client.pupPage.evaluate(async (contactId) => {
+            return window.Store.Wap.statusFind(contactId);
+        }, this.id._serialized);
+
+        if (typeof about.status !== 'string')
+            return null;
+
+        return about.status;
     }
     
 }

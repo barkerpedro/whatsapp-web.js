@@ -2,9 +2,9 @@
 <html>
 
 <head>
-  <meta name="generator" content="JSDoc 3.6.3">
+  <meta name="generator" content="JSDoc 3.6.6">
   <meta charset="utf-8">
-  <title>whatsapp-web.js 1.2.1 &raquo; Source: structures/GroupChat.js</title>
+  <title>whatsapp-web.js 1.12.4 &raquo; Source: structures/GroupChat.js</title>
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Karla:400,400i,700,700i" type="text/css">
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Noto+Serif:400,400i,700,700i" type="text/css">
   <link rel="stylesheet" href="https://brick.a.ssl.fastly.net/Inconsolata:500" type="text/css">
@@ -15,7 +15,7 @@
   <nav id="jsdoc-navbar" role="navigation" class="jsdoc-navbar">
     <div id="jsdoc-navbar-container">
       <div id="jsdoc-navbar-content">
-        <a href="index.html" class="jsdoc-navbar-package-name">whatsapp-web.<wbr>js 1.<wbr>2.<wbr>1</a>
+        <a href="index.html" class="jsdoc-navbar-package-name">whatsapp-web.<wbr>js 1.<wbr>12.<wbr>4</a>
       </div>
     </div>
   </nav>
@@ -34,6 +34,14 @@
 const Chat &#x3D; require(&#x27;./Chat&#x27;);
 
 /**
+ * Group participant information
+ * @typedef {Object} GroupParticipant
+ * @property {ContactId} id
+ * @property {boolean} isAdmin
+ * @property {boolean} isSuperAdmin
+ */
+
+/**
  * Represents a Group Chat on WhatsApp
  * @extends {Chat}
  */
@@ -46,6 +54,7 @@ class GroupChat extends Chat {
 
     /**
      * Gets the group owner
+     * @type {ContactId}
      */
     get owner() {
         return this.groupMetadata.owner;
@@ -66,9 +75,10 @@ class GroupChat extends Chat {
     get description() {
         return this.groupMetadata.desc;
     }
+
     /**
      * Gets the group participants
-     * @type {array}
+     * @type {Array&amp;lt;GroupParticipant&gt;}
      */
     get participants() {
         return this.groupMetadata.participants;
@@ -77,6 +87,7 @@ class GroupChat extends Chat {
     /**
      * Adds a list of participants by ID to the group
      * @param {Array&amp;lt;string&gt;} participantIds 
+     * @returns {Promise&amp;lt;Object&gt;}
      */
     async addParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) &#x3D;&gt; {
@@ -87,6 +98,7 @@ class GroupChat extends Chat {
     /**
      * Removes a list of participants by ID to the group
      * @param {Array&amp;lt;string&gt;} participantIds 
+     * @returns {Promise&amp;lt;Object&gt;}
      */
     async removeParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) &#x3D;&gt; {
@@ -97,6 +109,7 @@ class GroupChat extends Chat {
     /**
      * Promotes participants by IDs to admins
      * @param {Array&amp;lt;string&gt;} participantIds 
+     * @returns {Promise&amp;lt;{ status: number }&gt;} Object with status code indicating if the operation was successful
      */
     async promoteParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) &#x3D;&gt; {
@@ -107,6 +120,7 @@ class GroupChat extends Chat {
     /**
      * Demotes participants by IDs to regular users
      * @param {Array&amp;lt;string&gt;} participantIds 
+     * @returns {Promise&amp;lt;{ status: number }&gt;} Object with status code indicating if the operation was successful
      */
     async demoteParticipants(participantIds) {
         return await this.client.pupPage.evaluate((chatId, participantIds) &#x3D;&gt; {
@@ -117,6 +131,7 @@ class GroupChat extends Chat {
     /**
      * Updates the group subject
      * @param {string} subject 
+     * @returns {Promise} 
      */
     async setSubject(subject) {
         let res &#x3D; await this.client.pupPage.evaluate((chatId, subject) &#x3D;&gt; {
@@ -131,6 +146,7 @@ class GroupChat extends Chat {
     /**
      * Updates the group description
      * @param {string} description 
+     * @returns {Promise} 
      */
     async setDescription(description) {
         let res &#x3D; await this.client.pupPage.evaluate((chatId, description) &#x3D;&gt; {
@@ -144,7 +160,40 @@ class GroupChat extends Chat {
     }
 
     /**
+     * Updates the group settings to only allow admins to send messages.
+     * @param {boolean} [adminsOnly&#x3D;true] Enable or disable this option 
+     * @returns {Promise&amp;lt;boolean&gt;} Returns true if the setting was properly updated. This can return false if the user does not have the necessary permissions.
+     */
+    async setMessagesAdminsOnly(adminsOnly&#x3D;true) {
+        let res &#x3D; await this.client.pupPage.evaluate((chatId, value) &#x3D;&gt; {
+            return window.Store.Wap.setGroupProperty(chatId, &#x27;announcement&#x27;, value);
+        }, this.id._serialized, adminsOnly);
+
+        if (res.status !&#x3D;&#x3D; 200) return false;
+        
+        this.groupMetadata.announce &#x3D; adminsOnly;
+        return true;
+    }
+
+    /**
+     * Updates the group settings to only allow admins to edit group info (title, description, photo).
+     * @param {boolean} [adminsOnly&#x3D;true] Enable or disable this option 
+     * @returns {Promise&amp;lt;boolean&gt;} Returns true if the setting was properly updated. This can return false if the user does not have the necessary permissions.
+     */
+    async setInfoAdminsOnly(adminsOnly&#x3D;true) {
+        let res &#x3D; await this.client.pupPage.evaluate((chatId, value) &#x3D;&gt; {
+            return window.Store.Wap.setGroupProperty(chatId, &#x27;restrict&#x27;, value);
+        }, this.id._serialized, adminsOnly);
+
+        if (res.status !&#x3D;&#x3D; 200) return false;
+        
+        this.groupMetadata.restrict &#x3D; adminsOnly;
+        return true;
+    }
+
+    /**
      * Gets the invite code for a specific group
+     * @returns {Promise&amp;lt;string&gt;} Group&#x27;s invite code
      */
     async getInviteCode() {
         let res &#x3D; await this.client.pupPage.evaluate(chatId &#x3D;&gt; {
@@ -160,6 +209,7 @@ class GroupChat extends Chat {
     
     /**
      * Invalidates the current group invite code and generates a new one
+     * @returns {Promise}
      */
     async revokeInvite() {
         return await this.client.pupPage.evaluate(chatId &#x3D;&gt; {
@@ -168,28 +218,8 @@ class GroupChat extends Chat {
     }
 
     /**
-     * Returns an object with information about the invite code&#x27;s group
-     * @param {string} inviteCode 
-     * @returns {Promise&amp;lt;object&gt;} Invite information
-     */
-    static async getInviteInfo(inviteCode) {
-        return await this.client.pupPage.evaluate(inviteCode &#x3D;&gt; {
-            return window.Store.Wap.groupInviteInfo(inviteCode);
-        }, inviteCode);
-    }
-
-    /**
-     * Joins a group with an invite code
-     * @param {string} inviteCode 
-     */
-    static async join(inviteCode) {
-        return await this.client.pupPage.evaluate(inviteCode &#x3D;&gt; {
-            return window.Store.Wap.acceptGroupInvite(inviteCode);
-        }, inviteCode);
-    }
-
-    /**
      * Makes the bot leave the group
+     * @returns {Promise}
      */
     async leave() {
         return await this.client.pupPage.evaluate(chatId &#x3D;&gt; {
@@ -209,7 +239,7 @@ module.exports &#x3D; GroupChat;</code></pre>
   <footer id="jsdoc-footer" class="jsdoc-footer">
     <div id="jsdoc-footer-container">
       <p>
-        Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc</a> 3.6.3 on March 5, 2020.
+        Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc</a> 3.6.6 on February 11, 2021.
       </p>
     </div>
   </footer>
